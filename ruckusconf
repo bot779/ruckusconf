@@ -1,0 +1,568 @@
+#!/usr/bin/expect --
+# ruckusconf
+# negotiate ssh login to ruckus controller or AP
+# and collect data
+#
+# William Burns
+
+set progname ruckusconf
+
+set timeval 10
+set waittime 0
+set passtime 30
+set timeout $timeval
+set username admin
+#set username ""
+#set apasswd "Pa$$w0rd"
+set apasswd ""
+#set epasswd "En@bl3"
+set epasswd ""
+set goenable false
+set aprompt 1
+set eprompt 1
+set makeinfile false
+set infilename ""
+set devlistname ""
+set confmode "section"
+set configexit 0
+
+set space " "
+
+set prompt "ruckus>"
+set commandprompt $prompt
+
+set didpasswdprompt false
+
+# Where is my secure credential system?
+set getpw "./getpw"
+set password ""
+set nopassword ""
+
+set debug true
+set debug false
+
+set telnet false
+
+#system umask 0002
+
+if { $debug eq "true" } {
+  #send_user "progname $env(PROGNAMECRED)\n"
+}
+
+proc waitforprompt {} {
+  global prompt
+  if { $prompt == "config" } {
+    expect -re {
+      "ruckus\(config[^ ]*\)#" {}
+    }
+  } else {
+    expect {
+      $prompt {}
+    }
+  }
+}
+
+proc waitforpriv {} {
+  expect {
+    "#" {}
+    "> (enable)" {}
+  }
+}
+
+proc sttyechoexit { {message Exiting} } {
+  global progname
+  if { [info vars tty_spawn_id] eq "tty_spawn_id" } {
+    exp_stty echo
+  } else {
+    exp_stty echo < /dev/stdin
+  }
+  send_user "$progname: $message\n"
+  exit
+}
+
+proc sttynoecho {} {
+  if { [info vars tty_spawn_id] eq "tty_spawn_id" } {
+    exp_stty -echo
+  } else {
+    exp_stty -echo < /dev/stdin
+  }
+}
+
+############################################
+# Get Options Processing
+
+ while { [llength $argv] > 0 } {
+  set flag [lindex $argv 0]
+  switch -- $flag {
+    "--telnet" {
+        set telnet true
+        set argv [lrange $argv 1 end]
+      }
+    "--username" {
+        set username [lindex $argv 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--localdebug" {
+        set debug true
+        set argv [lrange $argv 1 end]
+      }
+    "--outfile" -
+    "--logfile" {
+        #set outfilename [lindex $argv 1]
+        if {$confmode == "section"} {
+          lappend commandlist $commandprompt command-entry-mode
+          set confmode "entry"
+        }
+        lappend commandlist logfile
+        lappend commandlist [lrange $argv 1 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--infile" {
+        set infilename [lindex $argv 1]
+        set argv [lrange $argv 2 end]
+        if {[file exist $infilename]} {
+          set infile [open $infilename]
+        } else {
+          send_user "infile $infilename not found\n"
+          exit
+        }
+      }
+    "--makeinfile" {
+        set makeinfile true
+        set argv [lrange $argv 1 end] 
+      }
+    "--devlist" {
+        set devlistname [lindex $argv 1]
+        set argv [lrange $argv 2 end]
+        if {[file exist $devlistname]} {
+          set devfile [open $devlistname]
+        } else {
+          send_user "infile $devlistname not found\n"
+          exit
+        }
+      }
+    "--password" {
+        set apasswd [lindex $argv 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--enablepassword" {
+        set epasswd [lindex $argv 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--enable" {
+        set goenable true
+        set argv [lrange $argv 1 end]
+        set intro { "ruckus>" ena
+                  }
+        set commandprompt "ruckus#"
+        set outro { "ruckus#" "exit" \
+                  }
+      }
+    "--ap" {
+        set intro ""
+        set prompt "rkscli:"
+        set commandprompt $prompt
+        set outro { "rkscli:" "exit"
+                  }
+        set argv [lrange $argv 1 end]
+      }
+    "--config" {
+        set context "config"
+        set argv [lrange $argv 1 end]
+        set intro { "ruckus>" ena \
+                    "ruckus#" config \
+                  }
+        set commandprompt "config"
+        set outro { "config" "exit" \
+                    "ruckus#" "exit" \
+                  }
+#                    "ruckus>" "exit"
+      }
+    "--debug" {
+        set context "debug"
+        set argv [lrange $argv 1 end]
+        set intro { "ruckus>" ena \
+                    "ruckus#" debug \
+                  }
+        set commandprompt "ruckus(debug)#"
+        set outro { "ruckus(debug)#" "quit" \
+                    "ruckus#" "exit" \
+                  }
+#                    "ruckus>" "exit" \
+      }
+    "--script" {
+        set context "script"
+        set argv [lrange $argv 1 end]
+        set intro { "ruckus>" ena \
+                    "ruckus#" debug \
+                    "ruckus(debug)#" script \
+                  }
+        set commandprompt "ruckus(script)#"
+        set outro { "ruckus(script)#" "quit" \
+                    "ruckus(debug)#" "quit" \
+                    "ruckus#" "exit" \
+                  }
+#                    "ruckus>" "exit" \
+      }
+    "--waittime" -
+    "--wait" {
+        if {$confmode == "section"} {
+          lappend commandlist $commandprompt command-entry-mode
+          set confmode "entry"
+        }
+        lappend commandlist waittime
+        lappend commandlist [lrange $argv 1 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--quiet" {
+        lappend commandlist quiet-mode
+        set argv [lrange $argv 1 end]
+      }
+    "--timeout" {
+        if {$confmode == "section"} {
+          lappend commandlist $commandprompt command-entry-mode
+          set confmode "entry"
+        }
+        lappend commandlist timeout
+        lappend commandlist [lrange $argv 1 1]
+        set argv [lrange $argv 2 end]
+      }
+    "--section" -
+    "--context" {
+        if {$confmode == "entry"} {
+          lappend commandlist section-context-mode
+          set confmode "section"
+        }
+        lappend commandlist $commandprompt [lrange $argv 1 1]
+        set commandprompt config
+        set argv [lrange $argv 2 end]
+        if { [lrange $argv 1 1] == "exit" } {
+          set configexit [expr $configexit - 1]
+        } else {
+          set configexit [expr $configexit + 1]
+        }
+      }
+    "--c" -
+    "--command" {
+        if {$confmode == "section"} {
+          lappend commandlist $commandprompt command-entry-mode
+          set confmode "entry"
+        }
+        lappend commandlist [lrange $argv 1 1]
+        set argv [lrange $argv 2 end]
+      }
+      "--example" {
+        send_user -- "Examples:\n"
+        send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show wlan name public" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "support" --outfile support --command "show support" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --config --section "system" --command "hostname myruckuscontroller" 192.168.3.180\n'
+        exit
+      }
+    default { break }
+  }
+}
+set argc [llength $argv]
+
+if {$debug == true} {
+  send_user "argc = $argc\n"
+}
+
+if {$devlistname != ""} {
+  incr argc
+}
+
+if {$argc != 1} {
+        send_user "Usage: ruckusconf \[OPTIONS\] device_ip\n"
+        send_user "Options:\n"
+        send_user -- "--username <username>\n"
+        send_user -- "--password <passw0rd>\n"
+        send_user -- "--enable  ;# bring the ruckus to enable mode\n"
+        send_user -- "--config  ;# bring the ruckus to config mode\n"
+        send_user -- "--debug   ;# bring the ruckus to debug mode\n"
+        send_user -- "--script  ;# bring the ruckus to script mode\n"
+        send_user -- "--section <context> ;# change to configuration-context mode\n"
+        send_user -- "--exit    ;# exit out of configuration-context mode\n"
+        send_user -- "--ap      ;# connect to an access point (not a controller)\n"
+        send_user -- "--command <command line> ;# run the command in the specified mode\n"
+        send_user -- "--timeout <seconds>      ;# set the timeout for the next command\n"
+        send_user -- "--waittime <seconds>     ;# time to wait before beginning the timeout interval\n"
+        send_user -- "--quiet                  ;# suppress command output\n"
+        send_user -- "--outfile <save/output/in/filename>\n"
+        send_user -- "--infile <read/rules/from/filename>\n"
+        send_user -- "--makeinfile <write/rules/to/filename>\n"
+        send_user -- "--devlist <read/device_ip/list/from/filename>\n" 
+        send_user -- "--localdebug ;# show internal debugging info from the ruckusconf script\n"
+        send_user -- "--example ;# show examples and exit\n"
+        exit
+}
+
+if {$devlistname == ""} {
+  set devlist [lindex $argv 0]
+} else {
+  set devlist ""
+  while { [gets $devfile line] > -1 } {
+    set devlist [ concat $devlist $line ]
+  }
+}
+
+
+if {$infilename == ""} {
+  if {$configexit > 0} {
+    while {$configexit >0} {
+      lappend exitphrase config exit
+      set configexit [expr $configexit - 1]
+    }
+    set commandlist [ concat $intro $commandlist section-context-mode $exitphrase $outro ]
+  } else {
+    set commandlist [ concat $intro $commandlist section-context-mode $outro ]
+  }
+}
+
+# read commands from an infile
+
+if {$infilename != ""} {
+  set commandlist ""
+  set confmode "section"
+  while { [gets $infile line] > -1 } {
+    if { $confmode == "section" } {
+      if {[regexp {^([^ ]*) (.*$)} $line -> cmditem1 cmditem2]} {
+        if { $commandlist == "" } {
+          set commandlist [ concat $cmditem1 $cmditem2 ]
+        } else {
+          set commandlist [ concat $commandlist $cmditem1 $cmditem2 ]
+        }
+      } else {
+        send_user "error: '$line' not a valid section-mode config-line$"
+        exit
+      }
+      if { $cmditem2 == "command-entry-mode" } {
+        set confmode "entry"
+      }
+    } else {
+      # confmode is "entry"
+      set commandlist [concat $commandlist [list "$line"]]
+      if { $line == "section-context-mode" } {
+        set confmode "section"
+      }
+    }
+  }
+}
+
+if {$makeinfile == true} {
+ set confmode section
+ while { [llength $commandlist] > 0 } {
+   set cmditem1 [join [lrange $commandlist 0 0] $space]
+   set cmditem2 [join [lrange $commandlist 1 1] $space]
+   if { $confmode == "section" } {
+     set commandlist [lrange $commandlist 2 end]
+     send_user -- "$cmditem1 [join $cmditem2 $space]\n"
+   } else {
+     set commandlist [lrange $commandlist 1 end]
+     send_user -- "[join $cmditem1 $space]\n"
+   }
+
+   if { $confmode == "section" && $cmditem2 == "command-entry-mode"} { 
+     set confmode "entry"
+   }
+   if { $confmode == "entry" && $cmditem1 == "section-context-mode"} { 
+     set confmode "section"
+   }
+ }
+ exit
+}
+
+set originalcommandlist $commandlist
+
+foreach device $devlist {
+set commandlist $originalcommandlist
+
+#if { $debug eq "true" } {
+#  send_user "apasswd is $apasswd\n"
+#}
+
+#if { $debug eq "true" } {
+#  send_user "epasswd is $epasswd\n"
+#}
+
+#log_user 0
+
+if { "$telnet" == "true" } {
+
+  spawn telnet [$device]
+  expect {
+    "Connected to" {}
+    timeout {exit}
+  }
+} else {
+  if { "$username" == "" } {
+    send_user -- "Error: --username required for ssh access\n"
+    exit
+  }
+  #send_user " spawn ssh $admin@$device \n"
+  spawn ssh $username@$device
+  expect {
+    -re "assword:"  { send -- "$apasswd\r"
+    }   "assword :" { send -- "$apasswd\r"
+    }   "login:"    { send -- "$username\r"
+    }   "yes/no)?"  { send "yes\r"
+                      exp_continue
+    }   timeout     { sttyechoexit "SSH Connection Failure\n"
+                      exit
+    }   eof         { sttyechoexit "SSH Connection Failure\n"
+                      exit
+    }
+  }
+}
+
+set aprompt 1
+while { $aprompt > 0 } {
+  expect {
+    $prompt { set aprompt 0 }
+    "sername:" {
+          set aprompt 2
+          if { "$username" == "" } {
+            #stty -echo
+            set didpasswdprompt true
+            sttynoecho
+            set timeout $passtime
+            send_user "\nWhat is the access username? "
+            expect_user -re "(.*)\n"
+            send_user "\n"
+            set username $expect_out(1,string)
+          }
+          if { "$username" == "" } { sttyechoexit }
+          set timeout $timeval
+          send "$username\r"
+    }
+    "ogin:" {
+          set aprompt 2
+          if { "$username" == "" } {
+            #stty -echo
+            set didpasswdprompt true
+            sttynoecho
+            set timeout $passtime
+            send_user "\nWhat is the access username? "
+            expect_user -re "(.*)\n"
+            send_user "\n"
+            set username $expect_out(1,string)
+          }
+          if { "$username" == "" } { sttyechoexit }
+          set timeout $timeval
+          send "$username\r"
+    }
+
+    "assword" {
+      if { "$apasswd" == "" } {
+        #stty -echo
+        set didpasswdprompt true
+        if { $debug == true } { send_user "password prompt detected\n" }
+        sttynoecho
+        set timeout $passtime
+        send_user "\nWhat is the correct access password? "
+        expect_user {
+          -re "(.*)\n" { set apasswd $expect_out(1,string) }
+        }
+        send_user "\n"
+      }
+      if { "$apasswd" == "" } { sttyechoexit "No password found"}
+      set timeout $timeval
+      send "$apasswd\r"
+    }
+    timeout {sttyechoexit "Timed out"}
+  }
+}
+
+#stty echo
+if { $didpasswdprompt eq "true" } {
+  if { [info vars tty_spawn_id] eq "tty_spawn_id" } {
+    exp_stty echo
+  } else {
+    exp_stty echo < /dev/stdin
+  }
+}
+
+# Should be logged in.
+# Now execute commands in "$commandlist"
+
+send "\r"
+set confmode section
+
+set prompt [join [lrange $commandlist 0 0] $space]
+set commandlist [lrange $commandlist 1 end]
+if { $debug eq "true" } { send_user "initial waitforprompt $prompt\n" }
+waitforprompt
+
+while { [llength $commandlist] > 0 } {
+  if {$debug == true} { send_user "confmode is $confmode\n" }
+  if {$confmode == "section"} {
+    set cmditem [join [lrange $commandlist 0 0] $space]
+    set commandlist [lrange $commandlist 1 end]
+    if {$cmditem == "command-entry-mode"} {
+      set confmode "entry"
+    } else {
+        if { $debug eq "true" } { send_user "sending $cmditem\n" }
+      send "[join [lrange $cmditem 0 end] $space]\r"
+      if { [llength $commandlist] > 0 } {
+        set prompt [join [lrange $commandlist 0 0] $space]
+        set commandlist [lrange $commandlist 1 end]
+        set timeout $timeval
+        if { $debug eq "true" } { send_user "section mode waitforprompt $prompt\n" }
+        waitforprompt
+      }
+    }
+  } else {
+    # confmode is "entry"
+    set cmditem [join [lrange $commandlist 0 0] $space]
+    set commandlist [lrange $commandlist 1 end]
+    if {$cmditem == "logfile"} {
+      set outfilename [join [lrange $commandlist 0 0] $space]
+      set commandlist [lrange $commandlist 1 end]
+      if {$outfilename == "none"} {
+        log_file
+      } else {
+        if { $debug eq "true" } { send_user "entry mode logfile is $outfilename$device.txt\n" }
+        log_file -noappend "$outfilename$device.txt"
+      }
+    } else {
+    if {$cmditem == "timeout"} {
+      set timeout [join [lrange $commandlist 0 0] $space]
+      set commandlist [lrange $commandlist 1 end]
+      if {$debug == true} {send_user "timeout set to $timeout\n"}
+    } else {
+    if {$cmditem == "waittime"} {
+      set waittime [join [lrange $commandlist 0 0] $space]
+      set commandlist [lrange $commandlist 1 end]
+      if {$debug == true} {send_user "waittime set to $waittime\n"}
+    } else {
+    if {$cmditem == "quiet-mode"} {
+      log_user 0
+      send_user "<output suppressed> "
+    } else {
+    if {$cmditem == "section-context-mode"} {
+      set confmode "section"
+      set prompt [join [lrange $commandlist 0 0] $space]
+      set commandlist [lrange $commandlist 1 end]
+      set waittime 0
+      log_user 1
+    } else {
+      if { $debug eq "true" } { send_user "sending $cmditem\n" }
+      send "[join [lrange $cmditem 0 end] $space]\r"
+      if { $waittime > 0 } { sleep $waittime }
+      if { $debug eq "true" } { send_user "entry mode waitforprompt $prompt\n" }
+      waitforprompt
+    # Termination of 5 "if $cmditem" statements and 4 "else"
+#    }
+    }
+    }
+    }
+    }
+  }
+}
+
+expect eof
+log_file
+
+# end foreach device $devlist
+}
+
+exit
