@@ -1,0 +1,25 @@
+#!/bin/sh
+# buildclientos.txt
+#
+# William Burns
+
+CONTROLLER=192.168.1.99
+CONTROLLER=${1:-$CONTROLLER}
+
+## read output of "wlaninfo -S" to wlaninfo file.
+./ruckusconf --debug --outfile wlaninfo --command "wlaninfo -S" --outfile none $CONTROLLER
+
+wc -l clientos.txt
+
+# Combine MAC address, hostname_ and OS on one line
+cat wlaninfo${CONTROLLER}.txt \
+| grep -e ^Station -e "^  Hostname" \
+| sed -e 's/^Station \([^ ]*\) .*$/\1/' \
+      -e 's/^.* Hostname = \(.*\) Dvcinfo = \(.*\) Flags = .*$/\1_ \2/' \
+| sed -e '/^..:..:..:..:..:..$/N;s/^\([^\n]*\)\n\([^:]*\)$/\1 \2/' \
+>> clientos.txt
+
+#re-sort the data, eliminating duplicates
+mv clientos.txt clientos.tmp
+sort -u clientos.tmp > clientos.txt
+wc -l clientos.txt
