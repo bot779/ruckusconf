@@ -302,11 +302,11 @@ if {$argc != 1} {
         send_user -- "--command <command line> ;# run the command in the specified mode\n"
         send_user -- "--timeout <seconds>      ;# set the timeout for the next command\n"
         send_user -- "--waittime <seconds>     ;# time to wait before beginning the timeout interval\n"
-        send_user -- "--loopprog <setup/scheduling/postprocessing/programname>\n"
         send_user -- "--outfile <save/output/in/filename>\n"
         send_user -- "--infile <read/rules/from/filename>\n"
         send_user -- "--makeinfile <write/rules/to/filename>\n"
         send_user -- "--devlist <read/device_ip/list/from/filename>\n" 
+        send_user -- "--loopprog <setup/scheduling/postprocessing/programname>\n"
         send_user -- "--localdebug ;# show internal debugging info from the ruckusconf script\n"
         send_user -- "--example ;# show examples and exit\n"
         exit
