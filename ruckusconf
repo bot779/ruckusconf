@@ -23,12 +23,15 @@ set eprompt 1
 set makeinfile false
 set infilename ""
 set devlistname ""
+set loopprog ""
+set continueloop true
 set confmode "section"
 set configexit 0
 
 set space " "
 
-set prompt "ruckus>"
+set firstprompt "ruckus>"
+set prompt $firstprompt
 set commandprompt $prompt
 
 set didpasswdprompt false
@@ -103,6 +106,7 @@ proc sttynoecho {} {
         set argv [lrange $argv 2 end]
       }
     "--localdebug" {
+        # turn on internal debugging for this script
         set debug true
         set argv [lrange $argv 1 end]
       }
@@ -137,9 +141,16 @@ proc sttynoecho {} {
         if {[file exist $devlistname]} {
           set devfile [open $devlistname]
         } else {
-          send_user "infile $devlistname not found\n"
+          send_user "devlist $devlistname not found\n"
           exit
         }
+      }
+  "--loopprog" {
+        # shell-out and invoke an external program
+        # that can prepare an infile
+        # and that controls looping
+        set loopprog [lrange $argv 1 1]
+        set argv [lrange $argv 2 end]
       }
     "--password" {
         set apasswd [lindex $argv 1]
@@ -160,7 +171,8 @@ proc sttynoecho {} {
       }
     "--ap" {
         set intro ""
-        set prompt "rkscli:"
+        set firstprompt "rkscli:"
+        set prompt $firstprompt
         set commandprompt $prompt
         set outro { "rkscli:" "exit"
                   }
@@ -179,6 +191,7 @@ proc sttynoecho {} {
 #                    "ruckus>" "exit"
       }
     "--debug" {
+        # put the device into debug context
         set context "debug"
         set argv [lrange $argv 1 end]
         set intro { "ruckus>" ena \
@@ -254,8 +267,15 @@ proc sttynoecho {} {
       "--example" {
         send_user -- "Examples:\n"
         send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show wlan name public" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "support" --outfile support --command "show support" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "support" --outfile support --command "support show" 192.168.3.180\n'
         send_user -- '  ./ruckusconf --config --section "system" --command "hostname myruckuscontroller" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --debug --command 'remote_ap_cli -a 24:c9:a1:29:2d:30 "get band-steering wlan32"' 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --debug --command 'rksap_cli -s -a 24:c9:a1:29:2d:30 "iwpriv wlan0 get_ampdu"' 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --debug --command "delete-station 10:0b:a9:73:2d:a0" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "iwpriv wlan32 get_ampdu" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "iwpriv wlan0 ampdu 0" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "get detected" 192.168.3.180\n'
+        send_user -- '  ./ruckusconf --ap --command "set leave"  192.168.3.180\n'
         exit
       }
     default { break }
@@ -287,6 +307,7 @@ if {$argc != 1} {
         send_user -- "--timeout <seconds>      ;# set the timeout for the next command\n"
         send_user -- "--waittime <seconds>     ;# time to wait before beginning the timeout interval\n"
         send_user -- "--quiet                  ;# suppress command output\n"
+        send_user -- "--loopprog <setup/scheduling/postprocessing/programname>\n"
         send_user -- "--outfile <save/output/in/filename>\n"
         send_user -- "--infile <read/rules/from/filename>\n"
         send_user -- "--makeinfile <write/rules/to/filename>\n"
@@ -295,6 +316,28 @@ if {$argc != 1} {
         send_user -- "--example ;# show examples and exit\n"
         exit
 }
+
+
+while { $continueloop == "true" } {
+  if { $loopprog == "" } {
+    set continueloop false
+  } else {
+    if { [ catch {exec $loopprog} msg ] } {
+      set continueloop false
+      send_user "saw output on stderr of loopprog\n"
+      send_user "normal end of loop\n"
+      exit
+    } else {
+      send_user "\nreturned from loopprog\n"
+      if { $errorCode != "" } {
+        send_user "$loopprog errorCode is $errorCode \n"
+        send_user "end of loop\n"
+        set continueloop false
+        exit
+      }
+    }
+  }
+#############
 
 if {$devlistname == ""} {
   set devlist [lindex $argv 0]
@@ -321,6 +364,14 @@ if {$infilename == ""} {
 # read commands from an infile
 
 if {$infilename != ""} {
+  #6 lines of code duplicated from option processing
+  if {[file exist $infilename]} {
+    set infile [open $infilename]
+    seek $infile 0 start
+  } else {
+    send_user "infile $infilename not found\n"
+    exit
+  }
   set commandlist ""
   set confmode "section"
   while { [gets $infile line] > -1 } {
@@ -375,6 +426,7 @@ set originalcommandlist $commandlist
 
 foreach device $devlist {
 set commandlist $originalcommandlist
+set prompt $firstprompt
 
 #if { $debug eq "true" } {
 #  send_user "apasswd is $apasswd\n"
@@ -468,7 +520,7 @@ while { $aprompt > 0 } {
       set timeout $timeval
       send "$apasswd\r"
     }
-    timeout {sttyechoexit "Timed out"}
+    timeout {sttyechoexit 'Timed out waiting for "'"$prompt"'"?'}
   }
 }
 
@@ -550,7 +602,7 @@ while { [llength $commandlist] > 0 } {
       if { $waittime > 0 } { sleep $waittime }
       if { $debug eq "true" } { send_user "entry mode waitforprompt $prompt\n" }
       waitforprompt
-    # Termination of 5 "if $cmditem" statements and 4 "else"
+    # Termination of 4 "if $cmditem" statements and 3 "else"
 #    }
     }
     }
@@ -563,6 +615,9 @@ expect eof
 log_file
 
 # end foreach device $devlist
+}
+
+# end while continueloop
 }
 
 exit
