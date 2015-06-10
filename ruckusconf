@@ -145,7 +145,7 @@ proc sttynoecho {} {
           exit
         }
       }
-  "--loopprog" {
+    "--loopprog" {
         # shell-out and invoke an external program
         # that can prepare an infile
         # and that controls looping
@@ -227,10 +227,6 @@ proc sttynoecho {} {
         lappend commandlist [lrange $argv 1 1]
         set argv [lrange $argv 2 end]
       }
-    "--quiet" {
-        lappend commandlist quiet-mode
-        set argv [lrange $argv 1 end]
-      }
     "--timeout" {
         if {$confmode == "section"} {
           lappend commandlist $commandprompt command-entry-mode
@@ -306,7 +302,6 @@ if {$argc != 1} {
         send_user -- "--command <command line> ;# run the command in the specified mode\n"
         send_user -- "--timeout <seconds>      ;# set the timeout for the next command\n"
         send_user -- "--waittime <seconds>     ;# time to wait before beginning the timeout interval\n"
-        send_user -- "--quiet                  ;# suppress command output\n"
         send_user -- "--loopprog <setup/scheduling/postprocessing/programname>\n"
         send_user -- "--outfile <save/output/in/filename>\n"
         send_user -- "--infile <read/rules/from/filename>\n"
@@ -347,7 +342,6 @@ if {$devlistname == ""} {
     set devlist [ concat $devlist $line ]
   }
 }
-
 
 if {$infilename == ""} {
   if {$configexit > 0} {
@@ -427,6 +421,7 @@ set originalcommandlist $commandlist
 foreach device $devlist {
 set commandlist $originalcommandlist
 set prompt $firstprompt
+
 
 #if { $debug eq "true" } {
 #  send_user "apasswd is $apasswd\n"
@@ -586,16 +581,11 @@ while { [llength $commandlist] > 0 } {
       set commandlist [lrange $commandlist 1 end]
       if {$debug == true} {send_user "waittime set to $waittime\n"}
     } else {
-    if {$cmditem == "quiet-mode"} {
-      log_user 0
-      send_user "<output suppressed> "
-    } else {
     if {$cmditem == "section-context-mode"} {
       set confmode "section"
       set prompt [join [lrange $commandlist 0 0] $space]
       set commandlist [lrange $commandlist 1 end]
       set waittime 0
-      log_user 1
     } else {
       if { $debug eq "true" } { send_user "sending $cmditem\n" }
       send "[join [lrange $cmditem 0 end] $space]\r"
@@ -604,7 +594,6 @@ while { [llength $commandlist] > 0 } {
       waitforprompt
     # Termination of 4 "if $cmditem" statements and 3 "else"
 #    }
-    }
     }
     }
     }
