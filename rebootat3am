@@ -1,0 +1,114 @@
+#!/bin/sh
+# rebootat3am
+# reboots all ruckus APs connected to the controller at 3:30am tomorrow
+
+# note: change the (hard coded) IP address at the bottom of this script
+# .. to the IP address of your controller
+
+COMMANDNAME=$0
+
+DEBUG=true
+DEBUG=false
+
+if [ -e ${COMMANDNAME}.running ]
+then
+
+  if [ -e ${COMMANDNAME}.loopcount ]
+  then
+    LOOPCOUNT=`cat ${COMMANDNAME}.loopcount`
+    let LOOPCOUNT=$LOOPCOUNT+1
+    echo "$LOOPCOUNT" > ${COMMANDNAME}.loopcount
+
+    case $LOOPCOUNT in
+      "2" )
+        STARTTIME=`date -d "3:30am tomorrow" +%s`
+        #STARTTIME=`date -d "5:40pm today" +%s`
+        NOW=`date -d "NOW" +%s`
+        let DELAY=$STARTTIME-$NOW
+        # $DEBUG && DELAY=12
+        $DEBUG && echo "sleep $DELAY"
+        if [ $DELAY -lt 1 ]
+        then
+          echo "negative delay? abort the loop" >&2
+          exit 1
+        fi
+        if sleep $DELAY
+        then
+
+          # Enter this command on the ruckus controller in debug mode:
+          # rksap_cli -A "reboot"
+          # tested w/ this command-line: rksap_cli -a 24:c9:a1:29:47:a0 "reboot"
+
+          cat > ${COMMANDNAME}.commands <<EeOoFf
+ruckus> ena
+ruckus# debug
+ruckus(debug)# command-entry-mode
+timeout
+120
+rksap_cli -A "reboot"
+section-context-mode
+ruckus(debug)# quit
+ruckus# exit
+EeOoFf
+        if $DEBUG
+        then
+:
+#        cat >$COMMANDNAME.commands <<EeOoFf
+#ruckus> history
+#ruckus> exit
+#EeOoFf
+        fi
+
+          exit 0
+        else
+          # sleep failed probably due to a sig-TERM
+          echo "abort the loop" >&2
+          rm ${COMMANDNAME}.running
+          rm ${COMMANDNAME}.loopcount
+          rm ${COMMANDNAME}.commands
+          exit 1
+        fi
+        ;;
+      "3" )
+        # put post-processing code here
+        echo "time to end the loop" >&2
+        rm ${COMMANDNAME}.running
+        rm ${COMMANDNAME}.loopcount
+        rm ${COMMANDNAME}.commands
+        exit 1
+        ;;
+      "1" )
+        echo "first time through the loop"
+        echo "do setup work"
+        cat >$COMMANDNAME.commands <<EeOoFf
+ruckus> history
+ruckus> exit
+EeOoFf
+        exit 0
+        ;;
+      * )
+        echo "time to end the loop" >&2
+        rm ${COMMANDNAME}.running
+        rm ${COMMANDNAME}.loopcount
+        rm ${COMMANDNAME}.commands
+        exit 1
+        ;;
+    esac
+  else
+    echo "${COMMANDNAME}.loopcount is missing" >&2
+    exit 1  
+  fi
+    
+else
+
+  $DEBUG && echo "if this is the first call then"
+  touch ${COMMANDNAME}.commands
+  touch ${COMMANDNAME}.running
+  echo "0" > ${COMMANDNAME}.loopcount
+  date
+  #$DEBUG || ./testloop
+  $DEBUG && echo ./ruckusconf --loopprog "${COMMANDNAME}" --infile ${COMMANDNAME}.commands 192.168.1.99
+  $DEBUG || ./ruckusconf --loopprog "${COMMANDNAME}" --infile ${COMMANDNAME}.commands 192.168.1.99
+  [ -e $COMMANDNAME}.running ] && rm ${COMMANDNAME}.running
+  date
+fi
