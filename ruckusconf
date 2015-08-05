@@ -262,6 +262,7 @@ proc sttynoecho {} {
       }
       "--example" {
         send_user -- "Examples:\n"
+        send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show config" 192.168.3.180\n'
         send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show wlan name public" 192.168.3.180\n'
         send_user -- '  ./ruckusconf --ap --command "support" --outfile support --command "support show" 192.168.3.180\n'
         send_user -- '  ./ruckusconf --config --section "system" --command "hostname myruckuscontroller" 192.168.3.180\n'
