@@ -262,17 +262,17 @@ proc sttynoecho {} {
       }
       "--example" {
         send_user -- "Examples:\n"
-        send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show config" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --password passw0rd --username admin --enable --command "show wlan name public" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "support" --outfile support --command "support show" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --config --section "system" --command "hostname myruckuscontroller" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --debug --command 'remote_ap_cli -a 24:c9:a1:29:2d:30 "get band-steering wlan32"' 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --debug --command 'rksap_cli -s -a 24:c9:a1:29:2d:30 "iwpriv wlan0 get_ampdu"' 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --debug --command "delete-station 10:0b:a9:73:2d:a0" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "iwpriv wlan32 get_ampdu" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "iwpriv wlan0 ampdu 0" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "get detected" 192.168.3.180\n'
-        send_user -- '  ./ruckusconf --ap --command "set leave"  192.168.3.180\n'
+        send_user -- "  ./ruckusconf --password passw0rd --username admin --enable --command \"show config\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --password passw0rd --username admin --enable --command \"show wlan name public\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --ap --command \"support\" --outfile support --command \"support show\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --config --section \"system\" --command \"hostname myruckuscontroller\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --debug --command 'remote_ap_cli -a 24:c9:a1:29:2d:30 \"get band-steering wlan32\"' 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --debug --command 'rksap_cli -s -a 24:c9:a1:29:2d:30 \"iwpriv wlan0 get_ampdu\"' 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --debug --command \"delete-station 10:0b:a9:73:2d:a0\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --ap --command \"iwpriv wlan32 get_ampdu\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --ap --command \"iwpriv wlan0 ampdu 0\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --ap --command \"get detected\" 192.168.3.180\n"
+        send_user -- "  ./ruckusconf --ap --command \"set leave\"  192.168.3.180\n"
         exit
       }
     default { break }
