@@ -24,6 +24,9 @@ set makeinfile false
 set infilename ""
 set devlistname ""
 set loopprog ""
+set intro ""
+set outro { "ruckus>" "exit" \
+          }
 set continueloop true
 set confmode "section"
 set configexit 0
