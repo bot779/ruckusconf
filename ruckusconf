@@ -519,6 +519,10 @@ while { $aprompt > 0 } {
       set timeout $timeval
       send "$apasswd\r"
     }
+    # Deal with optional login warning message
+    "Continue:press 'Enter']:" {
+      send -- "\r"
+    }
     timeout {sttyechoexit 'Timed out waiting for "'"$prompt"'"?'}
   }
 }
