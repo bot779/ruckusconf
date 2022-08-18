@@ -450,7 +450,7 @@ if { "$telnet" == "true" } {
     exit
   }
   #send_user " spawn ssh $admin@$device \n"
-  spawn ssh $username@$device
+  spawn ssh -oHostKeyAlgorithms=+ssh-rsa $username@$device
   expect {
     -re "assword:"  { send -- "$apasswd\r"
     }   "assword :" { send -- "$apasswd\r"
